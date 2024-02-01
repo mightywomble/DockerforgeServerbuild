@@ -1,0 +1,84 @@
+  ---
+- name: Install Docker CE, MariaDB, and other packages
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    sql_root_password: "Qw3rty123?"
+
+  tasks:
+    - name: Install Docker dependencies
+      apt:
+        name: ['apt-transport-https', 'ca-certificates', 'curl', 'software-properties-common']
+        state: present
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable
+        state: present
+
+    - name: Install Docker CE
+      apt:
+        name: docker-ce
+        state: present
+
+    - name: Install MariaDB
+      apt:
+        name: mariadb-server
+        state: present
+
+    - name: Run mysql_secure_installation
+      expect:
+        command: mysql_secure_installation
+        responses:
+          'Enter current password for root (enter for none):': ''
+          'Set root password? [Y/n]': 'Y'
+          'New password:': '{{ sql_root_password }}'
+          'Re-enter new password:': '{{ sql_root_password }}'
+          'Remove anonymous users? [Y/n]': 'Y'
+          'Disallow root login remotely? [Y/n]': 'Y'
+          'Remove test database and access to it? [Y/n]': 'Y'
+          'Reload privilege tables now? [Y/n]': 'Y'
+
+    - name: Install other packages
+      apt:
+        name: ['ansible', 'apache2', 'php', 'python3-pip', 'btop', 'nano', 'curl', 'nmap']
+        state: present
+
+    - name: Add preference for index.php in dir.conf
+      lineinfile:
+        path: /etc/apache2/mods-enabled/dir.conf
+        regex: '^DirectoryIndex'
+        line: 'DirectoryIndex index.php index.html index.cgi index.pl index.xhtml index.htm'
+
+    - name: Restart Apache service
+      service:
+        name: apache2
+        state: restarted
+
+    - name: Pull contents of Git repository
+      git:
+        repo: ssh://git@git.safewebbox.com:2222/david/DockerfileForge.git
+        dest: /var/www/html
+        accept_hostkey: yes
+
+    - name: Create devopsdev database
+      mysql_db:
+        name: devopsdev
+        state: present
+        login_user: root
+        login_password: '{{ sql_root_password }}'
+
+    - name: Restore MySQL database backup
+      mysql_db:
+        name: <database_name>
+        state: import
+        target: /path/to/databackup/devopsdev_dump.sql
+        login_user: root
+        login_password: <your_root_password>
